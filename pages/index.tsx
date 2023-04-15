@@ -1,6 +1,8 @@
 import { PGChunk } from "@/types";
 import Head from "next/head";
 import { useState } from "react";
+import endent from "endent";
+import { Answer } from "@/components/Answer/Answer";
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -9,6 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const handleAnswer = async () => {
+    setLoading(true);
     const searchResponse = await fetch("/api/search", {
       method: "POST",
       headers: {
@@ -18,14 +21,50 @@ export default function Home() {
     });
 
     if (!searchResponse.ok) {
+      setLoading(false);
       return;
     }
 
     const results: PGChunk[] = await searchResponse.json();
     setChunks(results);
-    console.log(results);
-  };
 
+    const prompt = endent`
+      Use the following passages to answer the query: ${query}
+
+      ${results.map((chunk) => chunk.content).join("\n")}
+    `;
+
+    const answerResponse = await fetch("api/answer", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!answerResponse.ok) {
+      setLoading(false);
+      return;
+    }
+
+    const data = answerResponse.body;
+
+    if (!data) {
+      return;
+    }
+
+    const reader = data.getReader();
+    const decoder = new TextDecoder();
+    let done = false;
+
+    while (!done) {
+      const { value, done: doneReading } = await reader.read();
+      done = doneReading;
+      const chunkValue = decoder.decode(value);
+      setAnswer((prev) => prev + chunkValue);
+    }
+    setLoading(false);
+  };
   return (
     <>
       <Head>
@@ -51,6 +90,9 @@ export default function Home() {
         >
           Submit
         </button>
+        <div className="mt-4">
+          {loading ? <div>Loading</div> : <Answer text={answer} />}
+        </div>
       </div>
     </>
   );
