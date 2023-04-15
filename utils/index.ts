@@ -65,6 +65,11 @@ export const OpenAIStream = async (prompt: string) => {
         }
       };
       const parser = createParser(onParse);
+
+      for await (const chunk of response.body as any) {
+        parser.feed(decoder.decode(chunk));
+      }
     },
   });
+  return stream;
 };
